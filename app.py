@@ -70,6 +70,7 @@ product_description = st.text_area(
 if st.button("Run Product Evaluation", type="primary"):
 
     if not product_name.strip() or not product_description.strip():
+
         st.warning("Please enter both product name and description.")
 
     else:
@@ -78,9 +79,6 @@ if st.button("Run Product Evaluation", type="primary"):
             f"Product Name: {product_name}\n"
             f"Product Description: {product_description}"
         )
-
-        st.session_state["product"] = product
-        st.session_state["product_name"] = product_name
 
         with st.spinner("Generating synthetic consumer personas..."):
 
@@ -112,9 +110,11 @@ if st.button("Run Product Evaluation", type="primary"):
             )
 
         st.session_state["results"] = results
+        st.session_state["product_name"] = product_name
+
         # Store product evaluation history
         if "product_history" not in st.session_state:
-          st.session_state["product_history"] = []
+            st.session_state["product_history"] = []
 
         summary = summarize_results(results)
 
@@ -159,6 +159,7 @@ if "results" in st.session_state:
         f"{summary['high_adoption_pct']:.1f}%"
     )
 
+
     # --------------------------------
     # STANCE DISTRIBUTION
     # --------------------------------
@@ -173,6 +174,7 @@ if "results" in st.session_state:
     st.bar_chart(
         stance_data.set_index("Consumer Response")
     )
+
 
     # --------------------------------
     # ADOPTION LIKELIHOOD
@@ -189,6 +191,7 @@ if "results" in st.session_state:
         adoption_data.set_index("Adoption Likelihood")
     )
 
+
     # --------------------------------
     # OVERALL ASSESSMENT
     # --------------------------------
@@ -200,16 +203,17 @@ if "results" in st.session_state:
     st.write(
         f"**Identified Risk Level:** {summary['risk_level']}"
     )
-    
+
+
     # --------------------------------
     # PRODUCT RISK DISTRIBUTION
     # --------------------------------
 
     st.divider()
 
-    st.header("5. Product Risk Distribution")
+    st.header("3. Product Risk Distribution")
 
-    if "product_history" in st.session_state and st.session_state["product_history"]:
+    if "product_history" in st.session_state:
 
         history_df = pd.DataFrame(
             st.session_state["product_history"]
@@ -238,11 +242,12 @@ if "results" in st.session_state:
             hide_index=True
         )
 
-        st.write("### Risk Percentages")
+        st.subheader("Risk Percentages")
 
         total = len(history_df)
 
         for level in ["Low", "Medium", "High"]:
+
             count = risk_counts[level]
             percentage = (count / total) * 100
 
@@ -251,7 +256,9 @@ if "results" in st.session_state:
             )
 
     else:
+
         st.info("Evaluate products to view the risk distribution.")
+
 
     # --------------------------------
     # COMMON FEEDBACK
@@ -272,13 +279,14 @@ if "results" in st.session_state:
     for item in summary["top_improvements"]:
         st.write(f"💡 {item}")
 
+
     # --------------------------------
     # INDIVIDUAL PERSONA RESULTS
     # --------------------------------
 
     st.divider()
 
-    st.header("3. Individual Persona Evaluations")
+    st.header("4. Individual Persona Evaluations")
 
     for index, result in enumerate(results):
 
@@ -312,16 +320,20 @@ if "results" in st.session_state:
             st.write(result["reasoning"])
 
             st.write("**Positive Factors:**")
+
             for item in result["positives"]:
                 st.write(f"- {item}")
 
             st.write("**Concerns:**")
+
             for item in result["concerns"]:
                 st.write(f"- {item}")
 
             st.write("**Improvements:**")
+
             for item in result["improvements"]:
                 st.write(f"- {item}")
+
 
     # --------------------------------
     # DOWNLOAD RESULTS
@@ -329,7 +341,7 @@ if "results" in st.session_state:
 
     st.divider()
 
-    st.header("4. Download Evaluation Results")
+    st.header("5. Download Evaluation Results")
 
     export_data = []
 
