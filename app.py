@@ -112,6 +112,17 @@ if st.button("Run Product Evaluation", type="primary"):
             )
 
         st.session_state["results"] = results
+        # Store product evaluation history
+        if "product_history" not in st.session_state:
+          st.session_state["product_history"] = []
+
+        summary = summarize_results(results)
+
+        st.session_state["product_history"].append({
+            "Product": product_name,
+            "Average Interest": summary["average_interest"],
+            "Risk Level": summary["risk_level"]
+        })
 
         progress.empty()
         status.success("Product evaluation completed!")
@@ -189,6 +200,58 @@ if "results" in st.session_state:
     st.write(
         f"**Identified Risk Level:** {summary['risk_level']}"
     )
+    
+    # --------------------------------
+    # PRODUCT RISK DISTRIBUTION
+    # --------------------------------
+
+    st.divider()
+
+    st.header("5. Product Risk Distribution")
+
+    if "product_history" in st.session_state and st.session_state["product_history"]:
+
+        history_df = pd.DataFrame(
+            st.session_state["product_history"]
+        )
+
+        risk_counts = (
+            history_df["Risk Level"]
+            .value_counts()
+            .reindex(["Low", "Medium", "High"], fill_value=0)
+        )
+
+        risk_df = pd.DataFrame({
+            "Risk Level": risk_counts.index,
+            "Number of Products": risk_counts.values
+        })
+
+        st.bar_chart(
+            risk_df.set_index("Risk Level")
+        )
+
+        st.subheader("Product Comparison")
+
+        st.dataframe(
+            history_df,
+            use_container_width=True,
+            hide_index=True
+        )
+
+        st.write("### Risk Percentages")
+
+        total = len(history_df)
+
+        for level in ["Low", "Medium", "High"]:
+            count = risk_counts[level]
+            percentage = (count / total) * 100
+
+            st.write(
+                f"**{level} Risk:** {count} products ({percentage:.1f}%)"
+            )
+
+    else:
+        st.info("Evaluate products to view the risk distribution.")
 
     # --------------------------------
     # COMMON FEEDBACK
