@@ -1,127 +1,440 @@
 
+import re
+
+
+def extract_product_price(product_text):
+    """Extract a price when it is explicitly mentioned in the description."""
+
+    patterns = [
+        r"₹\s*([\d,]+(?:\.\d+)?)",
+        r"Rs\.?\s*([\d,]+(?:\.\d+)?)",
+        r"INR\s*([\d,]+(?:\.\d+)?)",
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, product_text, re.IGNORECASE)
+
+        if match:
+            return float(match.group(1).replace(",", ""))
+
+    return None
+
+
 def evaluate_persona(persona, product):
-    """
-    Evaluate a product from the perspective of a synthetic
-    consumer persona using rule-based scoring.
-    """
+
+    product_text = str(product).lower()
 
     score = 5.0
     positives = []
     concerns = []
     improvements = []
 
-    product_text = str(product).lower()
-
-    # Extract persona characteristics
+    # Persona details
     age = persona.get("age", 25)
-    income = persona.get("income", "Medium")
+    occupation = persona.get("occupation", "")
+    budget = persona.get("budget", 5000)
     archetype = persona.get("archetype", "Practical Buyer")
 
     personality = persona.get("big_five", {})
     preferences = persona.get("preferences", [])
 
-    # 1. Affordability evaluation
-    price = persona.get("budget", 5000)
+    buying = persona.get("buying_behaviour", {})
 
-    if isinstance(price, (int, float)):
-        if price >= 5000:
-            score += 1
-            positives.append("The product may fit the consumer's budget.")
+    price_sensitivity = buying.get(
+        "price_sensitivity", "Medium"
+    )
+
+    decision_style = buying.get(
+        "decision_style", "Analytical"
+    )
+
+    # ------------------------------------------------
+    # 1. PRICE AND AFFORDABILITY
+    # ------------------------------------------------
+
+    product_price = extract_product_price(product_text)
+
+    if product_price is not None and budget > 0:
+
+        affordability_ratio = budget / product_price
+
+        if affordability_ratio >= 2:
+            score += 1.5
+            positives.append(
+                "The product is comfortably within the consumer's budget."
+            )
+
+        elif affordability_ratio >= 1:
+            score += 0.75
+            positives.append(
+                "The consumer can afford the product within their budget."
+            )
+
+        elif affordability_ratio >= 0.5:
+            score -= 0.75
+            concerns.append(
+                "The product may be expensive relative to the consumer's budget."
+            )
+
         else:
-            score -= 1
-            concerns.append("The product may be expensive for this consumer.")
+            score -= 1.75
+            concerns.append(
+                "The product price is significantly higher than the consumer's budget."
+            )
 
-    # 2. Personality-based evaluation
+        # Price sensitivity
+        if price_sensitivity == "High" and affordability_ratio < 1.5:
+            score -= 0.75
+            concerns.append(
+                "The consumer is highly sensitive to product pricing."
+            )
+
+        elif price_sensitivity == "Low" and affordability_ratio >= 1:
+            score += 0.25
+
+    else:
+        concerns.append(
+            "The product price is not clearly mentioned, so affordability cannot be assessed accurately."
+        )
+        improvements.append(
+            "Mention the product price to improve affordability evaluation."
+        )
+
+    # ------------------------------------------------
+    # 2. PREFERENCE MATCHING
+    # ------------------------------------------------
+
+    preference_keywords = {
+        "technology": [
+            "smart", "digital", "technology", "automated",
+            "sensor", "app", "electronic"
+        ],
+        "quality": [
+            "quality", "premium", "reliable", "well-made"
+        ],
+        "durability": [
+            "durable", "long-lasting", "strong", "sturdy"
+        ],
+        "convenience": [
+            "convenient", "easy", "portable", "reminder",
+            "automatic", "user-friendly"
+        ],
+        "eco-friendly": [
+            "eco-friendly", "biodegradable", "sustainable",
+            "reusable", "environment", "plant-based"
+        ],
+        "safety": [
+            "safety", "safe", "secure", "protection"
+        ],
+        "innovation": [
+            "innovative", "innovation", "smart", "advanced",
+            "unique", "technology"
+        ],
+        "fashion": [
+            "fashion", "stylish", "design", "appearance"
+        ],
+        "affordable": [
+            "affordable", "budget-friendly", "low-cost",
+            "economical"
+        ],
+        "simplicity": [
+            "simple", "easy", "basic", "convenient"
+        ],
+        "design": [
+            "design", "stylish", "appearance", "modern"
+        ],
+        "premium": [
+            "premium", "luxury", "high-end", "exclusive"
+        ]
+    }
+
+    matched_preferences = []
+
+    for preference in preferences:
+
+        keywords = preference_keywords.get(
+            str(preference).lower(),
+            [str(preference).lower()]
+        )
+
+        if any(keyword in product_text for keyword in keywords):
+            matched_preferences.append(preference)
+
+    if matched_preferences:
+        preference_score = min(
+            len(matched_preferences) * 0.5, 1.5
+        )
+
+        score += preference_score
+
+        positives.append(
+            "The product matches consumer preferences: "
+            + ", ".join(matched_preferences)
+            + "."
+        )
+
+    else:
+        score -= 0.75
+
+        concerns.append(
+            "The product does not strongly match this consumer's stated preferences."
+        )
+
+        improvements.append(
+            "Highlight features that match different consumer preferences."
+        )
+
+    # ------------------------------------------------
+    # 3. CONSUMER ARCHETYPE
+    # ------------------------------------------------
+
+    if archetype == "Early Adopter":
+
+        if any(word in product_text for word in [
+            "smart", "technology", "innovative",
+            "digital", "advanced"
+        ]):
+            score += 0.75
+            positives.append(
+                "The innovative features may attract early adopters."
+            )
+
+    elif archetype == "Budget Conscious":
+
+        if product_price is not None and product_price > budget:
+            score -= 0.5
+            concerns.append(
+                "The price may discourage budget-conscious consumers."
+            )
+
+    elif archetype == "Quality Seeker":
+
+        if any(word in product_text for word in [
+            "quality", "durable", "reliable", "premium"
+        ]):
+            score += 0.75
+            positives.append(
+                "The product highlights features valued by quality-conscious buyers."
+            )
+
+    elif archetype == "Eco Conscious":
+
+        if any(word in product_text for word in [
+            "eco-friendly", "biodegradable", "sustainable",
+            "reusable", "environment"
+        ]):
+            score += 0.75
+            positives.append(
+                "The sustainable features may attract environmentally conscious consumers."
+            )
+
+    elif archetype == "Risk Averse":
+
+        if any(word in product_text for word in [
+            "safe", "reliable", "tested", "warranty",
+            "certified", "secure"
+        ]):
+            score += 0.5
+            positives.append(
+                "Safety and reliability information may build consumer confidence."
+            )
+
+        else:
+            score -= 0.5
+            concerns.append(
+                "The cautious consumer may need more evidence of product reliability."
+            )
+
+    elif archetype == "Trend Follower":
+
+        if any(word in product_text for word in [
+            "trending", "modern", "smart", "stylish",
+            "innovative", "fashion"
+        ]):
+            score += 0.5
+
+    elif archetype == "Practical Buyer":
+
+        if any(word in product_text for word in [
+            "convenient", "useful", "practical",
+            "durable", "easy"
+        ]):
+            score += 0.5
+
+    # ------------------------------------------------
+    # 4. PERSONALITY-BASED EVALUATION
+    # ------------------------------------------------
+
     openness = personality.get("openness", 0.5)
-    conscientiousness = personality.get("conscientiousness", 0.5)
+    conscientiousness = personality.get(
+        "conscientiousness", 0.5
+    )
     extraversion = personality.get("extraversion", 0.5)
     agreeableness = personality.get("agreeableness", 0.5)
     neuroticism = personality.get("neuroticism", 0.5)
 
-    if openness > 0.7:
-        score += 1
-        positives.append("The consumer is open to trying new products.")
+    innovative = any(word in product_text for word in [
+        "smart", "innovative", "technology", "digital",
+        "advanced", "unique"
+    ])
 
-    if conscientiousness > 0.7:
+    practical = any(word in product_text for word in [
+        "convenient", "durable", "useful", "easy",
+        "reusable", "efficient"
+    ])
+
+    sustainable = any(word in product_text for word in [
+        "eco-friendly", "sustainable", "biodegradable",
+        "reusable", "environment"
+    ])
+
+    safe = any(word in product_text for word in [
+        "safe", "safety", "secure", "reliable",
+        "tested", "certified"
+    ])
+
+    if openness > 0.7 and innovative:
         score += 0.5
-        positives.append("The consumer values practical and well-planned purchases.")
+        positives.append(
+            "The consumer's openness to new experiences supports interest in innovative features."
+        )
 
-    if neuroticism > 0.7:
+    if conscientiousness > 0.7 and practical:
+        score += 0.5
+        positives.append(
+            "The product's practical features may appeal to this organized consumer."
+        )
+
+    if extraversion > 0.7 and any(word in product_text for word in [
+        "social", "fashion", "trending", "stylish",
+        "community"
+    ]):
+        score += 0.25
+
+    if agreeableness > 0.7 and sustainable:
+        score += 0.5
+        positives.append(
+            "The product's environmental benefits may appeal to this consumer."
+        )
+
+    if neuroticism > 0.7 and not safe:
         score -= 0.5
-        concerns.append("The consumer may be cautious about purchasing unfamiliar products.")
+        concerns.append(
+            "The consumer may hesitate without clear safety and reliability information."
+        )
 
-    # 3. Consumer archetype evaluation
-    archetype_scores = {
-        "Budget Conscious": -0.5,
-        "Trend Follower": 1,
-        "Early Adopter": 1.5,
-        "Practical Buyer": 0.5,
-        "Brand Loyalist": -0.5,
-        "Quality Seeker": 1,
-        "Eco Conscious": 0.5,
-        "Impulse Buyer": 1,
-        "Risk Averse": -1,
-        "Value Seeker": 0.5
+    # ------------------------------------------------
+    # 5. AGE AND OCCUPATION SUITABILITY
+    # ------------------------------------------------
+
+    audience_matches = []
+
+    occupation_keywords = {
+        "Student": ["student", "college", "school", "university"],
+        "Working Professional": [
+            "working professional", "office", "professional",
+            "workplace", "employee"
+        ],
+        "Entrepreneur": [
+            "business", "entrepreneur", "startup", "restaurant"
+        ],
+        "Freelancer": ["freelancer", "remote work", "work from home"],
+        "Homemaker": ["household", "home", "family"],
+        "Retired": ["senior", "elderly", "retired"]
     }
 
-    score += archetype_scores.get(archetype, 0)
+    relevant_keywords = occupation_keywords.get(
+        occupation, []
+    )
 
-    # 4. Preference matching
-    matched_preferences = [
-        preference for preference in preferences
-        if str(preference).lower() in product_text
-    ]
+    if any(keyword in product_text for keyword in relevant_keywords):
+        score += 0.75
 
-    if matched_preferences:
-        score += min(len(matched_preferences), 2)
         positives.append(
-            "The product matches some of the consumer's preferences."
+            "The product's intended audience matches the consumer's occupation."
         )
+
+        audience_matches.append(occupation)
+
+    # Age-related suitability
+    if age < 18 and any(word in product_text for word in [
+        "children", "kids", "teenagers"
+    ]):
+        score += 0.5
+
+    elif 18 <= age <= 35 and any(word in product_text for word in [
+        "young adults", "students", "young professionals"
+    ]):
+        score += 0.5
+
+    elif age >= 60 and any(word in product_text for word in [
+        "senior", "elderly", "older adults"
+    ]):
+        score += 0.5
+
+    # ------------------------------------------------
+    # 6. PRODUCT DESCRIPTION QUALITY
+    # ------------------------------------------------
+
+    if len(product_text) > 150:
+        positives.append(
+            "The product description provides a reasonable level of detail."
+        )
+
     else:
+        score -= 0.5
         concerns.append(
-            "The product description does not clearly match the consumer's preferences."
+            "The product description lacks sufficient detail."
         )
 
-    # 5. Product information evaluation
-    if len(product_text) > 100:
-        positives.append("The product description provides useful information.")
-    else:
-        concerns.append("The product description needs more details.")
+        improvements.append(
+            "Provide more information about product features and benefits."
+        )
 
-    if "quality" in product_text:
-        positives.append("Product quality is highlighted.")
+    if not any(word in product_text for word in [
+        "benefit", "designed", "helps", "aims",
+        "improve", "provides", "reduces"
+    ]):
+        improvements.append(
+            "Explain the main problem the product solves for consumers."
+        )
 
-    if "affordable" in product_text or "budget" in product_text:
-        positives.append("Affordability is highlighted.")
+    if not any(word in product_text for word in [
+        "quality", "durable", "reliable", "tested",
+        "warranty", "certified"
+    ]):
+        improvements.append(
+            "Provide more information about product quality and reliability."
+        )
 
-    # 6. Final score
-    score = max(1, min(10, round(score)))
+    # ------------------------------------------------
+    # 7. FINAL SCORE AND PREDICTION
+    # ------------------------------------------------
 
-    # Determine stance
+    score = round(max(1, min(10, score)), 1)
+
     if score >= 7:
         stance = "Positive"
         adoption = "High"
+
     elif score >= 4:
         stance = "Mixed"
         adoption = "Medium"
+
     else:
         stance = "Negative"
         adoption = "Low"
 
-    # Improvement suggestions
     if not improvements:
-        improvements = [
-            "Provide clearer product information.",
-            "Consider customer affordability.",
-            "Highlight the product's main benefits."
-        ]
+        improvements.append(
+            "Continue improving the product based on consumer feedback."
+        )
 
-    # Generate explanation
     reasoning = (
         f"This persona belongs to the {archetype} category. "
-        f"Their estimated interest score is {score}/10. "
-        f"The evaluation considers personality traits, "
-        f"consumer preferences and affordability."
+        f"The estimated interest score is {score}/10. "
+        f"The evaluation considers affordability, preferences, "
+        f"personality, buying behaviour and product suitability."
     )
 
     return {
